@@ -1,0 +1,29 @@
+
+apply plugin: 'groovy'
+
+project.group = 'org.miner'
+project.version = '1.0'
+project.ext.mainClass = 'org.miner.application.isbn.IsbnRenamer'
+
+repositories {
+    maven { url "http://it-maven/content/repositories/m2repo" }
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.4.5'
+    compile 'commons-validator:commons-validator:1.5.0'
+    compile 'org.yaml:snakeyaml:1.16'
+}
+
+// create a single Jar with all dependencies
+task fatJar(type: Jar) {
+        manifest {
+        attributes 'Implementation-Title': 'ISBN Renamer executable Jar',
+                   'Implementation-Version': version,
+                   'Main-Class': mainClass
+    }
+    baseName = project.name + '-exec'
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
