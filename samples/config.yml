@@ -1,0 +1,19 @@
+
+locations:
+    cacheDir: "${app.home}/cache"
+    publisherMap: "${app.home}/publisherMap.lst"
+
+services:
+    googlebooks:
+        trackingPath: "${app.home}/googlebooks-track.dat"
+        api: "https://www.googleapis.com/books/v1"
+        delay: 2000
+
+collections:
+    local:
+        shelfDir: "./finished"
+        holdDir: "./hold"
+    purchased:
+        shelfDir: "${user.home}/purchased"
+        holdDir: "./hold"
+
