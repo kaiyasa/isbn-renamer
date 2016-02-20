@@ -84,7 +84,7 @@ class IsbnRenamer {
     def perform(String src, String shelfDir, String holdDir) {
         def (dir, base, ext) = parsePath(src)
         def fileName = "${dir}/${base}.pdf"
-        def isbnList = validate(parse(convert(fileName))).unique()
+        def isbnList = validate(parse(annotate(base, convert(fileName)))).unique()
 
         boolean prompting = true, full = false
         List manual = []
@@ -228,11 +228,20 @@ class IsbnRenamer {
 
         def display = edition ? "$title, $edition Ed" : title
 
-        return "$display [${dpub(pub)}, $isbn, $pubDate]"
+        return "$display [${dpub(pub, isbn)}, $isbn, $pubDate]"
     }
 
-    def dpub(name) {
-        return pubmap.map( (name ?: "").toLowerCase()) ?: name
+    def dpub(name, isbn) {
+        def result = pubmap.map( (name ?: "").toLowerCase())
+
+        if (!result) {
+            def keys = (5..11).collect { isbn[3..it] }
+            for(String key : keys) {
+                if ((result = pubmap.map(key)))
+                    return result
+            }
+            return name
+        }
     }
 
     def clean(name) {
@@ -256,7 +265,10 @@ class IsbnRenamer {
             println("")
             def detail = cache.find(list[0].isbn)
             if (detail) {
-                println("\t Author(s):\t\t\tPages: ${detail.pageCount}")
+                if (detail.kind == 'video')
+                    println("\t Author(s):\t\t\tLength: ${detail.runLength} minutes")
+                else
+                    println("\t Author(s):\t\t\tPages: ${detail.pageCount}")
                 println("\t    ${detail.authors.join(', ')}")
                 println("\tCategories:\n\t    ${detail.categories.join(', ')}\n")
             }
@@ -306,6 +318,10 @@ class IsbnRenamer {
         def command = ['pdftotext', fname, '-']
 
         return command.execute().text
+    }
+
+    String annotate(String extra, String text) {
+        return "  $extra\n  $text"
     }
 
     List parse(String text) {

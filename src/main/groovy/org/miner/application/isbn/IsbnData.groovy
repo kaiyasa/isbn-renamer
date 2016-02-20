@@ -89,5 +89,33 @@ class IsbnData {
         return detail.categories = value.split(';')*.trim()
     }
 
+    String getKind() {
+        return detail.kind ?: ""
+    }
+
+    String setKind(String value) {
+        return detail.kind = value
+    }
+
+    /** in minutes */
+    int getRunLength() {
+        return detail.runLength ?: 0
+    }
+
+    int parseInt(value) {
+        return Integer.parseInt(value.toString())
+    }
+    int setRunLength(value) {
+         def result = (value ? value : '0').split(':').collect { parseInt(it) }.with {
+             switch (it.size()) {
+                 case 1: return it[0]
+                 case 2: return it[0] * 60 + it[1]
+                 case 3: return it[0] * 60 + it[1]
+                 default: throw new IllegalArgumentException("unknown time format: $value")
+             }
+         }
+        return detail.runLength = result
+    }
+
     def root, detail
 }
