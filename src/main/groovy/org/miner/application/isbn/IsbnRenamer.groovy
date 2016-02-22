@@ -8,6 +8,13 @@ import org.miner.utils.ConfigFile
 
 class IsbnRenamer {
     static void main(args) {
+
+        String.metaClass.times { n ->
+            return delegate.with { base ->
+                (1..n).collect {base}.join('')
+            }
+        }
+
         if (!args) {
             println("isbnrenamer collectionName <dirs|files>...")
             System.exit(0)
@@ -38,6 +45,7 @@ class IsbnRenamer {
     def pubmap
     def config
     def service
+    def out = new DisplayFormatter()
 
     def suffix = ~/(\s|[,.-])*$/
     def eds = [
@@ -60,10 +68,18 @@ class IsbnRenamer {
     }
 
     def run(toUse, args) {
+/*
+        if (!config.containsKey(toUse)) {
+            println("Unknown collection '$toUse'")
+            System.exit(-1)
+        }
+*/
+
         def (shelfDir, holdDir) = config.values.collections[toUse].with {
             [shelfDir, holdDir]
         }
 
+        def files = []
         for(name in args) {
             def path = new File(name)
 
@@ -71,13 +87,21 @@ class IsbnRenamer {
                 continue
 
             if (path.isFile())
-                perform(name, shelfDir, holdDir)
+                files += name
             else if (path.isDirectory()) {
                 path.eachFileRecurse(FileType.FILES) { file ->
-                    perform(file.path, shelfDir, holdDir)
+                    files += file.path
                 }
             } else
                 println("WARN: unknown filesystem object '$name'")
+        }
+
+        files.eachWithIndex { name, i ->
+            if (new File(name).exists()) {
+                println("=".times(80))
+                println("Processing #${i+1} of ${files.size()}\n")
+                perform(name, shelfDir, holdDir)
+            }
         }
     }
 
@@ -219,7 +243,7 @@ class IsbnRenamer {
         }
 
         def pub = detail.publisher
-        def pubDate = detail.publishedDate[0..3]
+        def pubDate = pdate(detail.publishedDate)
         def isbn = detail.isbn13
 
         def (title, edition) = clean(detail.title)
@@ -231,17 +255,22 @@ class IsbnRenamer {
         return "$display [${dpub(pub, isbn)}, $isbn, $pubDate]"
     }
 
+    def pdate(String date) {
+        return date[0..3]
+    }
+
     def dpub(name, isbn) {
         def result = pubmap.map( (name ?: "").toLowerCase())
 
-        if (!result) {
-            def keys = (5..11).collect { isbn[3..it] }
-            for(String key : keys) {
-                if ((result = pubmap.map(key)))
-                    return result
-            }
-            return name
+        if (result)
+            return result
+
+        def keys = (5..11).collect { isbn[3..it] }
+        for(String key : keys) {
+            if ((result = pubmap.map(key)))
+                return result
         }
+        return name
     }
 
     def clean(name) {
@@ -259,18 +288,19 @@ class IsbnRenamer {
     }
 
     def display(boolean full, src, list) {
-        println("\nFrom: $src")
+        out.labeledText(4, 'From', 1, "$src\n")
         if (!full || list.size() == 1) {
-            println("  To: ${list[0].name}")
-            println("")
+            out.labeledText(4, 'To', 1, "${list[0].name}\n\n")
             def detail = cache.find(list[0].isbn)
             if (detail) {
+                out.fieldDisplay(['Using ISBN': detail.isbn13, 'Group': 'not impl'])
                 if (detail.kind == 'video')
-                    println("\t Author(s):\t\t\tLength: ${detail.runLength} minutes")
+                    out.fieldDisplay(['Year': pdate(detail.publishedDate), 'Length': detail.runLength.toString()])
                 else
-                    println("\t Author(s):\t\t\tPages: ${detail.pageCount}")
-                println("\t    ${detail.authors.join(', ')}")
-                println("\tCategories:\n\t    ${detail.categories.join(', ')}\n")
+                    out.fieldDisplay(['Year': pdate(detail.publishedDate), 'Pages': detail.pageCount.toString()])
+                out.fieldDisplay(['Publisher': dpub(detail.publisher, detail.isbn13)] )
+                out.fieldDisplay(['Author(s)': '', 'Categories': ''])
+                out.displayLists(detail.authors, detail.categories)
             }
         } else {
             list.drop(1).eachWithIndex { entry, i ->
