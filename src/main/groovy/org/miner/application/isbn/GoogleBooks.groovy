@@ -9,7 +9,7 @@ class GoogleBooks {
         trackingPath = args.trackingPath
         delay = args.delay
 
-        api.isbnFetch = { isbn ->
+        api.isbnFetch = { String isbn ->
             return new URL(api.base + '/volumes?q=isbn:' + isbn)
         }
     }

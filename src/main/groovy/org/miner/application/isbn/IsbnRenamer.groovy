@@ -118,7 +118,7 @@ class IsbnRenamer {
                     work += '9999999999999'
 
                  def elements = 0 .. (full ? Math.min(4, work.size() - 1) : 0)
-                 return work[elements].collect { [isbn: it, name: target(it) ] }
+                 return work[elements].collect { isbnDetail(it) }
             }
 
             display(full, base, choice)
@@ -153,7 +153,8 @@ class IsbnRenamer {
                     full = false
                 } else if (ans == 'set') {
                     def detail = cache.find(choice[0].isbn)
-                    def aliases = [date: 'publishedDate', title: 'title', pub: 'publisher']
+                    def aliases = [date: 'publishedDate', length: 'runLength',
+                                   time: 'runLength', pages: 'pageCount', pub: 'publisher']
                     def (property, value) = parseSetting(option, aliases)
 
                     try {
@@ -230,36 +231,39 @@ class IsbnRenamer {
         return [aliases[property] ?: property, value]
     }
 
-    String target(String seek) {
-        def detail = cache.find(seek)
+    Map isbnDetail(String seek) {
+        if (!seek || seek.size() != 13)
+            throw new IllegalArgumentException('invalid ISBN-13')
 
-        if (!detail) {
-            def raw = service.isbnFetch(seek)
+        def resource = this
+        return [isbn: seek].with { result ->
+            detail = resource.cache.find(isbn)
 
-            if (raw['totalItems'] > 0) {
-                detail = cache.save(seek, raw)
-            } else
-                return "$seek not found"
+            if (!detail) {
+                def raw = resource.service.isbnFetch(isbn)
+
+                base = "$isbn not found"
+                if (raw['totalItems'] > 0)
+                    detail = cache.save(isbn, raw)
+                else 
+                    return result
+            }
+
+            (title, edition) = titleClean(detail.title)
+            base = edition ? "$title, $edition Ed" : title
+            year = toYear(detail.publishedDate)
+            publisher = mapPublisher(detail.publisher, isbn)
+
+            name = "$base [$publisher, $isbn, $year]"
+            return result
         }
-
-        def pub = detail.publisher
-        def pubDate = pdate(detail.publishedDate)
-        def isbn = detail.isbn13
-
-        def (title, edition) = clean(detail.title)
-        if (!isbn)
-            isbn = seek
-
-        def display = edition ? "$title, $edition Ed" : title
-
-        return "$display [${dpub(pub, isbn)}, $isbn, $pubDate]"
     }
 
-    def pdate(String date) {
+    def toYear(String date) {
         return date[0..3]
     }
 
-    def dpub(name, isbn) {
+    def mapPublisher(name, isbn) {
         def result = pubmap.map( (name ?: "").toLowerCase())
 
         if (result)
@@ -273,8 +277,9 @@ class IsbnRenamer {
         return name
     }
 
-    def clean(name) {
+    def titleClean(name) {
         def edition
+
         for(ed in eds) {
             def old = name
             name = name - ed.value
@@ -287,27 +292,38 @@ class IsbnRenamer {
         return [name - suffix, edition]
     }
 
+    def width = [
+        single: [4, 1]
+      , field:  [11, -17]
+      , columns: [-30, -30]
+    ]
+
     def display(boolean full, src, list) {
-        out.labeledText(4, 'From', 1, "$src\n")
-        if (!full || list.size() == 1) {
-            out.labeledText(4, 'To', 1, "${list[0].name}\n\n")
-            def detail = cache.find(list[0].isbn)
-            if (detail) {
-                out.fieldDisplay(['Using ISBN': detail.isbn13, 'Group': 'not impl'])
-                if (detail.kind == 'video')
-                    out.fieldDisplay(['Year': pdate(detail.publishedDate), 'Length': detail.runLength.toString()])
-                else
-                    out.fieldDisplay(['Year': pdate(detail.publishedDate), 'Pages': detail.pageCount.toString()])
-                out.fieldDisplay(['Publisher': dpub(detail.publisher, detail.isbn13)] )
-                out.fieldDisplay(['Author(s)': '', 'Categories': ''])
-                out.displayLists(detail.authors, detail.categories)
-            }
-        } else {
+        out.render(*width.single, 'From', src).println()
+
+        if (full && list.size() > 1) {
             list.drop(1).eachWithIndex { entry, i ->
-                println("  (${i+1}) ${entry['name']}")
-                println("")
+                out.render(*width.single, i + 1, entry.name, ') ').println()
             }
+            return
         }
+
+        def item = list[0]
+        out.render(*width.single, 'To', item.base).println('\n')
+
+        if (!item.detail)
+            return
+
+        out.render(*width.field, ['Using ISBN': item.isbn, 'Group': 'not impl']).println()
+        out.render(*width.field, ['Year': item.year] +
+            ((item.detail.kind == 'video') ? ['Length': item.detail.runLength]
+                                           : ['Pages': item.detail.pageCount])
+        ).println()
+        out.render(*width.field, ['Publisher': item.publisher]).println()
+
+        out.render(*width.field, ['Author(s)': '', 'Categories': '']).println()
+        out.render(width.columns, out.left(4, item.detail.authors),
+                                  out.left(3, item.detail.categories)).println('\n')
     }
 
     List parsePath(String path) {
