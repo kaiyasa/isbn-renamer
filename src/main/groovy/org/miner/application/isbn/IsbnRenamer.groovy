@@ -9,9 +9,9 @@ import org.miner.utils.ConfigFile
 class IsbnRenamer {
     static void main(args) {
 
-        String.metaClass.times { n ->
+        String.metaClass.repeat { int n ->
             return delegate.with { base ->
-                (1..n).collect {base}.join('')
+                (n > 0) ? (1..n).collect {base}.join('') : ''
             }
         }
 
@@ -98,12 +98,15 @@ class IsbnRenamer {
 
         files.eachWithIndex { name, i ->
             if (new File(name).exists()) {
-                println("=".times(80))
+                println("=".repeat(80))
                 println("Processing #${i+1} of ${files.size()}\n")
                 perform(name, shelfDir, holdDir)
             }
         }
     }
+
+    def aliases = [date: 'publishedDate', length: 'runLength',
+                   time: 'runLength', pages: 'pageCount', pub: 'publisher']
 
     def perform(String src, String shelfDir, String holdDir) {
         def (dir, base, ext) = parsePath(src)
@@ -153,8 +156,6 @@ class IsbnRenamer {
                     full = false
                 } else if (ans == 'set') {
                     def detail = cache.find(choice[0].isbn)
-                    def aliases = [date: 'publishedDate', length: 'runLength',
-                                   time: 'runLength', pages: 'pageCount', pub: 'publisher']
                     def (property, value) = parseSetting(option, aliases)
 
                     try {
