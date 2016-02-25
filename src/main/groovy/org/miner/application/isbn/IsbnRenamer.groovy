@@ -46,6 +46,7 @@ class IsbnRenamer {
     def config
     def service
     def out = new DisplayFormatter()
+    def filer = new Filer()
 
     def suffix = ~/(\s|[,.-])*$/
     def eds = [
@@ -124,7 +125,7 @@ class IsbnRenamer {
                  return work[elements].collect { isbnDetail(it) }
             }
 
-            display(full, base, choice)
+            display(full, dir, base, choice)
             print('Choice (? = help): ')
 
             def (ans, option) = input(System.console())
@@ -299,7 +300,7 @@ class IsbnRenamer {
       , columns: [-30, -30]
     ]
 
-    def display(boolean full, src, list) {
+    def display(boolean full, String dir, String src, List list) {
         out.render(*width.single, 'From', src).println()
 
         if (full && list.size() > 1) {
@@ -310,12 +311,15 @@ class IsbnRenamer {
         }
 
         def item = list[0]
+        def files = filer.fileGroup(dir, src, item.isbn)
+        def groups = files.groupBy {it.category}.collect {c, l -> "${l.size()} (${c})"}.join(', ')
+
         out.render(*width.single, 'To', item.base).println('\n')
+        out.render(*width.field, ['Using ISBN': item.isbn, 'Group': groups]).println()
 
         if (!item.detail)
             return
 
-        out.render(*width.field, ['Using ISBN': item.isbn, 'Group': 'not impl']).println()
         out.render(*width.field, ['Year': item.year] +
             ((item.detail.kind == 'video') ? ['Length': item.detail.runLength]
                                            : ['Pages': item.detail.pageCount])
