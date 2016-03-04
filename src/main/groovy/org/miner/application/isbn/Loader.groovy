@@ -2,39 +2,49 @@
 package org.miner.application.isbn
 
 class Loader {
-    Loader(cache) {
+    Loader(cache, service) {
         this.cache = cache
+        this.service = service
     }
 
-    def isbn(List isbnList) {
-        return isbnList.collect { code -> isbn(code) }
+    Map load(String isbn) {
+        return cache.find(isbn)
     }
 
-    Map isbn(String seek) {
+    Map fetch(String isbn) {
+        def raw = service.isbnFetch(isbn)
+
+        return (raw['totalItems'] > 0) ?
+            cache.save(isbn, raw) :
+            cache.createIsbn(isbn).with {
+                title = "$isbn not found"
+            }
+    }
+
+    Map gather(String seek) {
         if (!seek || seek.size() != 13)
             throw new IllegalArgumentException('invalid ISBN-13')
 
-        def resource = this
-        return [isbn: seek].with { result ->
-            detail = resource.cache.find(isbn)
+        def detail = load(seek)
+        if (!detail) 
+            detail = fetch(seek)
 
-            if (!detail) {
-                def raw = resource.service.isbnFetch(isbn)
+        def data = [isbn: seek]
+        return populate(data, detail)
+    }
 
-                base = "$isbn not found"
-                if (raw['totalItems'] > 0)
-                    detail = cache.save(isbn, raw)
-                else
-                    return result
-            }
+    List gather(List<String> isbnList) {
+        return isbnList.collect { String code -> gather(code) }
+    }
+
+    Map populate(Map data, isbnData) {
+        return data?.with {
+            detail = isbnData
 
             (title, edition) = titleClean(detail.title)
             base = edition ? "$title, $edition Ed" : title
             year = toYear(detail.publishedDate)
             publisher = mapPublisher(detail.publisher, isbn)
-
-            name = "$base [$publisher, $isbn, $year]"
-            return result
         }
     }
 
@@ -42,6 +52,6 @@ class Loader {
         return filer.fileGroup(dir, prefix, isbn)
     }
 
-    def cache
+    def cache, service
     def filer = New Filer()
 }
